@@ -30,7 +30,7 @@ int getInput(char* string){
   flush();
   return 1;
 }
-//parse the input we got
+//parse the input we got seperating by spaces
 void inputParser(char* input, char** parsedArguments){
   int i;
   for (i = 0; i < 512; i++) {
