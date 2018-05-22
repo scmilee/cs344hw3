@@ -49,7 +49,7 @@ int main(int argc, char const *argv[]) {
       if (getInput(inputbuffer)) {
         continue;
       }
-      inputParser(inputbuffer, parsedArguments)
+      inputParser(inputbuffer, parsedArguments);
 
     }
   exit;
