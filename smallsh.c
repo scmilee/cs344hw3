@@ -3,11 +3,14 @@
 #include<stdlib.h>
 #include<unistd.h>
 #include<sys/types.h>
+#include <fcntl.h>
 
 int getInput(char* buffer);
 void flush();
 void inputParser(char* input, char** parsedArguments);
 int changeDirectory(char * path);
+int ArgCount(char **parsedArguments);
+int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,int numberOfArgs);
 
 //flushin all around
 void flush(){
@@ -72,37 +75,115 @@ int changeDirectory(char *pth){
 
     return 0;
 }
+//goes through the parsed args array and counts them up and returns the index of the last arg
+//useful for saving resources not looping through 512 args everytime.
+int ArgCount(char **parsedArguments){
+  for (int i = 0; i < 512; ++i){
+    //also trims off empty args "" added to the end if there are extra spaces
+    if (parsedArguments[i] == NULL || strcmp(parsedArguments[i], "") == 0) {
+      return (i - 1);
+      break;
+    }
+  }
+  return 0;
+}
+
+//child forking from lectures and using execvp
+int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int numberOfArgs)
+{
+    //forking from lecture
+    pid_t pid = fork();
+    *childPID = pid; 
+    //
+    int redirBool = 1;
+
+    if (pid == -1) {
+        printf("\nFailed child forking.");
+        flush();
+        return 1;
+    } 
+    //if statement for detecting > and < 
+    // if redir bool is not set then execute without using dup2
+    else if (pid == 0) {
+      for (int i = 0; i < numberOfArgs + 1; ++i){
+        if (strcmp(parsedArguments[i], ">") == 0)
+        {
+          //set the redir bool to let the method know we've redirected 
+         redirBool = 0;
+         int fd = open(parsedArguments[i+1], O_CREAT|O_WRONLY);
+         //close off normal stdout
+         close(1);
+         //redirect stdout into the file name of arg[i+1], since i == >
+         dup2(fd, 1);
+         //set these null as they are no longer needed
+         parsedArguments[i] = NULL;
+         parsedArguments[i + 1] = NULL;
+
+         execvp(parsedArguments[0], parsedArguments);
+         exit(0);
+
+        }
+        else if (strcmp(parsedArguments[i], "<") == 0)
+        {
+         redirBool = 0;
+         int fd = open(parsedArguments[i + 1],O_RDONLY, 0);
+         dup2(fd, STDIN_FILENO);
+         close(fd);
+         
+         execvp(parsedArguments[0], parsedArguments);
+        }
+      
+      }
+      if (redirBool == 1)
+      {
+        execvp(parsedArguments[0], parsedArguments);
+      }
+    }
+    else{
+    // waiting for child to terminate
+   waitpid(pid, currentStatus, 0); 
+   return 0;
+ } 
+
+   return 0;
+}
 
 int main(int argc, char const *argv[]) {
   //char array for input and parsed arguments derived from input
   char inputbuffer[2048];
   char* parsedArguments[512];
-  int currentStatus;
+  pid_t childPID = 0;
+  int currentStatus = 0;
+
+  size_t numberOfArgs;
+
+
     
-
-  currentStatus = 0;
   //infinite loop!
-    while (1) {
+  while (1) {
 
-      printf(":");
+      printf(": ");
       flush();
       //if the input has no errors continue on through the loop
       if (getInput(inputbuffer)) {
         continue;
       }
       inputParser(inputbuffer, parsedArguments);
-      printf("%s\n", parsedArguments[0]);
+      numberOfArgs = ArgCount(parsedArguments);
+
+      parsedArguments[numberOfArgs + 1] = NULL;
+
       // a giant if else statement to detect if we're using in house commands before moving on to 
       //creating children
 
       //EXIT catch```````````````````````````````````````````````````````````````
       if (strcmp(parsedArguments[0], "exit") == 0){
-       	
-        exit(0);
+       
+         exit(0);
        } 
       // CD catch``````````````````````````````````````````````````````
       else if (strcmp(parsedArguments[0], "cd") == 0){
-        //if there is no path, pass in cd as path
+        //if there is no path, pass in cd as path (gets handled in function as default action)
         if (parsedArguments[1]  == NULL){
           changeDirectory(parsedArguments[0]);
           }  
@@ -112,14 +193,17 @@ int main(int argc, char const *argv[]) {
         }
       }// STATUS catch ```````````````````````````````````````````````````
       else if (strcmp(parsedArguments[0], "status") == 0){
-      	
-        printf("%d \n", currentStatus );
+        printf("%d\n", currentStatus );
+        flush();
       }
       else{
-
+        //if there was an issue executing the command. set the status to 1
+        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs) == 1){
+          currentStatus = 1;
+        }
+  
       }
-
-
+  
     }
-  exit(0);
+exit(0);
 }
