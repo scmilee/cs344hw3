@@ -10,7 +10,11 @@ void flush();
 void inputParser(char* input, char** parsedArguments);
 int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
-int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,int numberOfArgs);
+int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs);
+int redirChecker(char ** parsedArguments, size_t numberOfArgs, pid_t pid);
+int ampersandCheck(char **parsedArguments, size_t numberOfArgs);
+void shiftArgs(char **parsedArguments, int index);
+
 
 //flushin all around
 void flush(){
@@ -89,13 +93,60 @@ int ArgCount(char **parsedArguments){
 }
 
 //child forking from lectures and using execvp
-int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int numberOfArgs)
+int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs)
 {
     //forking from lecture
     pid_t pid = fork();
     *childPID = pid; 
-    //
-    int redirBool = 1;
+
+    int ampersandBool = ampersandCheck(parsedArguments, numberOfArgs);
+    if (ampersandBool == 0 && pid == 0){
+
+      redirChecker(parsedArguments, numberOfArgs, pid);
+    }
+    else if (ampersandBool == 1 && pid == 0)
+    {
+      int null = open("/dev/null",0);
+      dup2(null, STDIN_FILENO);
+      dup2(null, STDOUT_FILENO);
+      redirChecker(parsedArguments, numberOfArgs, pid);
+    }
+    flush();
+    //chekcing to see if its the parent
+    if (pid != 0 && pid != -1)
+  {
+    //checks if there's ampersands, will either wait or make it a bg process
+    if (ampersandBool == 0)
+    {
+      waitpid(pid, currentStatus, 0);
+    }
+    else if (ampersandBool == 1)
+    {
+      waitpid(pid, currentStatus, WNOHANG);
+      printf("Background process:%d has exited with a status of %d \n",pid , *currentStatus );
+    }
+  
+     
+  }
+
+   return 0;
+}
+
+void valueShift(char** parsedArguments, size_t numberOfArgs,int index){
+  
+  for (int i = index; i < numberOfArgs ; ++i)
+  {
+    parsedArguments[i] = parsedArguments[i + 1];
+  }
+  parsedArguments[numberOfArgs] = NULL;
+  for (int i = 0; i < numberOfArgs + 1; ++i)
+  {
+    puts(parsedArguments[i]);
+  }
+
+}
+int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
+  int redirBool = 1;
 
     if (pid == -1) {
         printf("\nFailed child forking.");
@@ -106,47 +157,83 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int nu
     // if redir bool is not set then execute without using dup2
     else if (pid == 0) {
       for (int i = 0; i < numberOfArgs + 1; ++i){
+        fflush(0);
+        //for each iteration see if the command matches > or <,
+        //if it does change the output/input accordingly,shift the value down and reset the counter
+
         if (strcmp(parsedArguments[i], ">") == 0)
         {
           //set the redir bool to let the method know we've redirected 
-         redirBool = 0;
+        
          int fd = open(parsedArguments[i+1], O_CREAT|O_WRONLY);
          //close off normal stdout
-         close(1);
+         close(STDOUT_FILENO);
          //redirect stdout into the file name of arg[i+1], since i == >
-         dup2(fd, 1);
-         //set these null as they are no longer needed
-         parsedArguments[i] = NULL;
-         parsedArguments[i + 1] = NULL;
-
-         execvp(parsedArguments[0], parsedArguments);
-         exit(0);
-
-        }
-        else if (strcmp(parsedArguments[i], "<") == 0)
-        {
-         redirBool = 0;
-         int fd = open(parsedArguments[i + 1],O_RDONLY, 0);
-         dup2(fd, STDIN_FILENO);
+         dup2(fd, STDOUT_FILENO);
          close(fd);
+         //set these null as they are no longer needed
          
-         execvp(parsedArguments[0], parsedArguments);
+         valueShift(parsedArguments, numberOfArgs, i);
+         numberOfArgs --;
+         valueShift(parsedArguments, numberOfArgs, i);
+         numberOfArgs --;
+         
+        redirBool = 0;
+        
+        i = 0;
         }
-      
+        if (strcmp(parsedArguments[i], "<") == 0)
+        {
+         
+         int tfd = open(parsedArguments[i + 1],O_RDONLY);
+         close(STDIN_FILENO);
+         dup2(tfd, STDIN_FILENO);
+         close(tfd);
+         //set these null as they are no longer needed
+         //and shift the values down
+         valueShift(parsedArguments, numberOfArgs, i);
+         numberOfArgs --;
+         valueShift(parsedArguments, numberOfArgs, i);
+         numberOfArgs--;
+         //set the redir bool flag
+         redirBool = 0;
+         //set i back to 0 to loop over the freshly moved vars
+        i = 0;
+        
       }
-      if (redirBool == 1)
-      {
-        execvp(parsedArguments[0], parsedArguments);
-      }
-    }
-    else{
-    // waiting for child to terminate
-   waitpid(pid, currentStatus, 0); 
-   return 0;
- } 
+    
+  }
 
-   return 0;
+  //couldnt get it working properly without seperating these two 
+  if (redirBool == 0)
+  {
+   execvp(parsedArguments[0], parsedArguments);
+  }
+  if (redirBool == 1)
+  {
+   execvp(parsedArguments[0], parsedArguments);
+  }
+  //exit for the children
+  exit(0);
+  
+  }
+return 1;
 }
+
+//function to check the butt of the string for an ampersand
+int ampersandCheck(char **parsedArguments, size_t numberOfArgs){
+  for (int i = numberOfArgs; i < numberOfArgs + 1; ++i)
+  {
+    if (strcmp(parsedArguments[i], "&") == 0)
+    {
+      //set it to null so it doesnt get passed to exec
+      parsedArguments[i] = NULL;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 
 int main(int argc, char const *argv[]) {
   //char array for input and parsed arguments derived from input
@@ -170,7 +257,7 @@ int main(int argc, char const *argv[]) {
       }
       inputParser(inputbuffer, parsedArguments);
       numberOfArgs = ArgCount(parsedArguments);
-
+      //set the end of the args to null to prevent segfaults
       parsedArguments[numberOfArgs + 1] = NULL;
 
       // a giant if else statement to detect if we're using in house commands before moving on to 
