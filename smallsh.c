@@ -237,8 +237,9 @@ int main(int argc, char const *argv[]) {
   char* parsedArguments[512];
   pid_t childPID = 0;
   int currentStatus = 0;
-
+  char * parentpid ;
   size_t numberOfArgs;
+
 
 
     
@@ -258,7 +259,20 @@ int main(int argc, char const *argv[]) {
 
       // a giant if else statement to detect if we're using in house commands before moving on to 
       //creating children
+      //loop to check for $$
+      for (int i = 0; i < numberOfArgs + 1; ++i)
+      {
+        //got the conversion from https://stackoverflow.com/questions/15262315/how-to-convert-pid-t-to-string
+        if (strcmp(parsedArguments[i], "$$") == 0)
+        {
+          
+          char pid[10];
+          snprintf(pid, 10,"%d",(int)getpid());
+          parsedArguments[i] = pid;
+          parentpid = pid;
 
+        }
+      }
       //EXIT catch```````````````````````````````````````````````````````````````
       if (strcmp(parsedArguments[0], "exit") == 0){
        
@@ -279,10 +293,11 @@ int main(int argc, char const *argv[]) {
         printf("%d\n", currentStatus );
         flush();
       }
-      else if (strcmp(parsedArguments[0], "$$") == 0)
+      else if (strcmp(parsedArguments[0], parentpid) == 0)
       {
-        printf("%d\n", getpid());
+        printf("%s\n", parentpid );
       }
+      
       else{
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
