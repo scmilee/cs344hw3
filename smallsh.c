@@ -131,7 +131,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t
 
    return 0;
 }
-
+//basic splice function, sets the end of the party to null so, we dont run off later on
 void valueShift(char** parsedArguments, size_t numberOfArgs,int index){
   
   for (int i = index; i < numberOfArgs ; ++i)
@@ -139,10 +139,6 @@ void valueShift(char** parsedArguments, size_t numberOfArgs,int index){
     parsedArguments[i] = parsedArguments[i + 1];
   }
   parsedArguments[numberOfArgs] = NULL;
-  for (int i = 0; i < numberOfArgs + 1; ++i)
-  {
-    puts(parsedArguments[i]);
-  }
 
 }
 int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
@@ -283,8 +279,13 @@ int main(int argc, char const *argv[]) {
         printf("%d\n", currentStatus );
         flush();
       }
+      else if (strcmp(parsedArguments[0], "$$") == 0)
+      {
+        printf("%d\n", getpid());
+      }
       else{
         //if there was an issue executing the command. set the status to 1
+        //also executes the meat and potatoes of the shell
         if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs) == 1){
           currentStatus = 1;
         }
