@@ -11,7 +11,7 @@ void flush();
 void inputParser(char* input, char** parsedArguments);
 int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
-int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs);
+int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs, struct sigaction sa);
 int redirChecker(char ** parsedArguments, size_t numberOfArgs, pid_t pid);
 int ampersandCheck(char **parsedArguments, size_t numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
@@ -24,7 +24,7 @@ void defaultSH(int signo);
 int bgProcesses[100];
 int bgCount = 0;
 int crtlZ = -1;
-struct sigaction sa;
+
 
 
 
@@ -128,7 +128,7 @@ int ArgCount(char **parsedArguments){
 }
 
 //child forking from lectures and using execvp
-int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs)
+int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs, struct sigaction sa)
 {
   //forking from lecture
   pid_t pid = fork();
@@ -333,7 +333,7 @@ int main(int argc, char const *argv[]) {
   char * parentpid ;
   size_t numberOfArgs;
   
-  
+  struct sigaction sa;
   sa.sa_flags = 0;
   //error checking
 
@@ -404,7 +404,7 @@ int main(int argc, char const *argv[]) {
       else{
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
-        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs) == 1){
+        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs, sa) == 1){
           currentStatus = 1;
         }
   
