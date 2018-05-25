@@ -2,6 +2,7 @@
 #include<string.h>
 #include<stdlib.h>
 #include<unistd.h>
+#include<signal.h>
 #include<sys/types.h>
 #include <fcntl.h>
 
@@ -14,6 +15,18 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t 
 int redirChecker(char ** parsedArguments, size_t numberOfArgs, pid_t pid);
 int ampersandCheck(char **parsedArguments, size_t numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
+void checkBg(void);
+void FG_handler(int signo);
+void defaultSH(int signo);
+
+
+//got tired of passing even more variables to the exec args functions
+int bgProcesses[100];
+int bgCount = 0;
+int crtlZ = -1;
+struct sigaction sa;
+
+
 
 
 //flushin all around
@@ -50,6 +63,28 @@ void inputParser(char* input, char** parsedArguments){
   int i;
   for (i = 0; i < 512; i++) {
     parsedArguments[i] = strsep(&input, " ");
+  }
+}
+// got the generic checkign code from 
+//https://stackoverflow.com/questions/26683162/execute-background-process-and-check-status-from-parent
+//then just implemented that method into a for loop to check all current bg processes for exits or signals.
+void checkBg() {
+  int currentStatus;
+  for(int i = 0; i < bgCount; i++) 
+  { 
+    if(waitpid(bgProcesses[i], &currentStatus, WNOHANG) > 0)
+    {
+      //check if it was signaled to exit
+      if(WIFSIGNALED(currentStatus)) 
+      {
+        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStatus));
+      }
+      //check if it exited on its own
+      if(WIFEXITED(currentStatus)) 
+      { 
+        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStatus));
+      }
+    }
   }
 }
 
@@ -95,40 +130,64 @@ int ArgCount(char **parsedArguments){
 //child forking from lectures and using execvp
 int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs)
 {
-    //forking from lecture
-    pid_t pid = fork();
-    *childPID = pid; 
+  //forking from lecture
+  pid_t pid = fork();
+  int ampersandBool = ampersandCheck(parsedArguments, numberOfArgs);
 
-    int ampersandBool = ampersandCheck(parsedArguments, numberOfArgs);
-    if (ampersandBool == 0 && pid == 0){
+  //sigstp pathways
+  if (crtlZ == -1)
+  {
+    //continue normally
 
-      redirChecker(parsedArguments, numberOfArgs, pid);
-    }
-    else if (ampersandBool == 1 && pid == 0)
-    {
-      int null = open("/dev/null",0);
-      dup2(null, STDIN_FILENO);
-      dup2(null, STDOUT_FILENO);
-      redirChecker(parsedArguments, numberOfArgs, pid);
-    }
-    flush();
-    //chekcing to see if its the parent
-    if (pid != 0 && pid != -1)
+  }
+  else if (crtlZ == 1)
+  {
+    //always set the child mode to FG if crtlz == 1
+    //and decrease # of args to prevent seg faulting due to lack of &
+    --numberOfArgs;
+
+    ampersandBool = 0;
+  }
+  if (ampersandBool == 0 && pid == 0)
+  {
+    sa.sa_handler = &FG_handler;
+    redirChecker(parsedArguments, numberOfArgs, pid);
+  }
+  else if (ampersandBool == 1 && pid == 0)
+  {
+    sa.sa_handler = &defaultSH;
+    int null = open("/dev/null",0);
+    //set input and output to null unless specified by the redir checker
+    dup2(null, STDIN_FILENO);
+    dup2(null, STDOUT_FILENO);
+    redirChecker(parsedArguments, numberOfArgs, pid);
+  }
+  flush();
+  //checking to see if its the parent
+  if (pid != 0 && pid != -1)
   {
     //checks if there's ampersands, will either wait or make it a bg process
     if (ampersandBool == 0)
     {
+      *childPID = pid;
+
       waitpid(pid, currentStatus, 0);
+      if(WIFSIGNALED(*currentStatus)) 
+      {
+        printf("Foreground Process %d exited from signal:%d\n", pid, WTERMSIG(*currentStatus));
+      }
+
     }
     else if (ampersandBool == 1)
     {
+      printf("Background process PID is :%d\n", pid );
+      //add bg processes to an array as suggested, to loop over and check.
+      bgProcesses[bgCount] = pid;
+      bgCount++;
       waitpid(pid, currentStatus, WNOHANG);
-      printf("Background process:%d has exited with a status of %d \n",pid , *currentStatus );
-    }
-  
+    } 
      
   }
-
    return 0;
 }
 //basic splice function, sets the end of the party to null so, we dont run off later on
@@ -204,10 +263,12 @@ int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
   if (redirBool == 0)
   {
    execvp(parsedArguments[0], parsedArguments);
+   exit(0);
   }
   if (redirBool == 1)
   {
    execvp(parsedArguments[0], parsedArguments);
+   exit(0);
   }
   //exit for the children
   exit(0);
@@ -224,10 +285,42 @@ int ampersandCheck(char **parsedArguments, size_t numberOfArgs){
     {
       //set it to null so it doesnt get passed to exec
       parsedArguments[i] = NULL;
+      --numberOfArgs; 
       return 1;
     }
   }
   return 0;
+}
+
+void defaultSH(int signo){
+  if (signo == SIGINT){
+    //ignore sigint for the normal shell and BG processes
+    printf("\n");
+    flush();
+    return;
+  }
+  //sets the global to its opposite value everytime a Crtl Z is sent
+  //this value will be the final control of ampersand bool, which controls if a process is sent
+  //to bg or fg
+  if (signo == SIGTSTP)
+  {
+    crtlZ = crtlZ * -1;
+    return;
+  }
+  return;
+}
+
+void FG_handler(int signo)
+{
+  //exit if the FG process has its handler set to this one.
+  if (signo == SIGINT){
+    //kill(getpid(), 2);
+    return;
+  }
+  if (signo == SIGTSTP)
+  {
+    return;
+  }
 }
 
 
@@ -239,19 +332,29 @@ int main(int argc, char const *argv[]) {
   int currentStatus = 0;
   char * parentpid ;
   size_t numberOfArgs;
+  
+  
+  sa.sa_flags = 0;
+  //error checking
 
+  sa.sa_handler = defaultSH;
+  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGTSTP, &sa, NULL);
+  
 
-
-    
   //infinite loop!
   while (1) {
-
+      //signal(SIGINT, SIG_IGN);
+      checkBg();
+      flush();
       printf(": ");
       flush();
+    
       //if the input has no errors continue on through the loop
       if (getInput(inputbuffer)) {
         continue;
       }
+
       inputParser(inputbuffer, parsedArguments);
       numberOfArgs = ArgCount(parsedArguments);
       //set the end of the args to null to prevent segfaults
@@ -264,8 +367,7 @@ int main(int argc, char const *argv[]) {
       {
         //got the conversion from https://stackoverflow.com/questions/15262315/how-to-convert-pid-t-to-string
         if (strcmp(parsedArguments[i], "$$") == 0)
-        {
-          
+        {   
           char pid[10];
           snprintf(pid, 10,"%d",(int)getpid());
           parsedArguments[i] = pid;
@@ -293,6 +395,7 @@ int main(int argc, char const *argv[]) {
         printf("%d\n", currentStatus );
         flush();
       }
+      //check for the $$ command
       else if (strcmp(parsedArguments[0], parentpid) == 0)
       {
         printf("%s\n", parentpid );
@@ -306,7 +409,7 @@ int main(int argc, char const *argv[]) {
         }
   
       }
-  
+    
     }
 exit(0);
 }
