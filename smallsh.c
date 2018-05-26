@@ -14,7 +14,7 @@ int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
 int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,int *numberOfArgs, struct sigaction *sa);
 int redirChecker(char ** parsedArguments, int numberOfArgs, pid_t pid);
-int ampersandCheck(char **parsedArguments, int* numberOfArgs);
+int ampersandCheck(char **parsedArguments, int *numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
 void checkBg(void);
 void FG_handler(int signo);
@@ -303,14 +303,14 @@ return 1;
 }
 
 //function to check the butt of the string for an ampersand
-int ampersandCheck(char **parsedArguments, int* numberOfArgs){
+int ampersandCheck(char **parsedArguments, int *numberOfArgs){
   for (int i = *numberOfArgs; i < *numberOfArgs + 1; ++i)
   {
     if (strcmp(parsedArguments[i], "&") == 0)
     {
       //set it to null so it doesnt get passed to exec
       parsedArguments[i] = NULL;
-      --numberOfArgs; 
+      --*numberOfArgs; 
       return 1;
     }
   }
