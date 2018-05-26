@@ -12,7 +12,7 @@ void flush();
 void inputParser(char* input, char** parsedArguments);
 int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
-int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs, struct sigaction sa);
+int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs, struct sigaction *sa);
 int redirChecker(char ** parsedArguments, size_t numberOfArgs, pid_t pid);
 int ampersandCheck(char **parsedArguments, size_t numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
@@ -25,10 +25,7 @@ void defaultSH(int signo);
 int bgProcesses[100];
 int bgCount = 0;
 int crtlZ = -1;
-
-
-
-
+size_t len;
 
 //flushin all around
 void flush(){
@@ -42,7 +39,7 @@ int getInput(char* string){
   //fill buffer up to its brim with input
   if (fgets(buffer, sizeof buffer, stdin) != NULL) {
   	//shaving off excess newline and replacing for a endline char /0
-	  size_t len = strlen(buffer);
+	  len = strlen(buffer);
 	  if (len > 0 && buffer[len-1] == '\n') {
 	    buffer[--len] = '\0';
 	  }
@@ -62,7 +59,7 @@ int getInput(char* string){
 //parse the input we got seperating by spaces
 void inputParser(char* input, char** parsedArguments){
   int i;
-  for (i = 0; i < 512; i++) {
+  for (i = 0; i < len +1; i++) {
     parsedArguments[i] = strsep(&input, " ");
   }
 }
@@ -129,7 +126,7 @@ int ArgCount(char **parsedArguments){
 }
 
 //child forking from lectures and using execvp
-int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs, struct sigaction sa)
+int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs, struct sigaction *sa)
 {
   //forking from lecture
   pid_t pid = fork();
@@ -151,12 +148,12 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t
   }
   if (ampersandBool == 0 && pid == 0)
   {
-    sa.sa_handler = &FG_handler;
+    sa->sa_handler = &FG_handler;
     redirChecker(parsedArguments, numberOfArgs, pid);
   }
   else if (ampersandBool == 1 && pid == 0)
   {
-    sa.sa_handler = &defaultSH;
+    sa->sa_handler = &defaultSH;
     int null = open("/dev/null",0);
     //set input and output to null unless specified by the redir checker
     dup2(null, STDIN_FILENO);
@@ -405,7 +402,7 @@ int main(int argc, char const *argv[]) {
       else{
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
-        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs, sa) == 1){
+        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs, &sa) == 1){
           currentStatus = 1;
         }
   
