@@ -9,12 +9,12 @@
 
 int getInput(char* buffer);
 void flush();
-void inputParser(char* input, char** parsedArguments);
+char **inputParser(char* input);
 int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
-int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,size_t numberOfArgs, struct sigaction *sa);
-int redirChecker(char ** parsedArguments, size_t numberOfArgs, pid_t pid);
-int ampersandCheck(char **parsedArguments, size_t numberOfArgs);
+int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,int *numberOfArgs, struct sigaction *sa);
+int redirChecker(char ** parsedArguments, int numberOfArgs, pid_t pid);
+int ampersandCheck(char **parsedArguments, int* numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
 void checkBg(void);
 void FG_handler(int signo);
@@ -26,6 +26,7 @@ int bgProcesses[100];
 int bgCount = 0;
 int crtlZ = -1;
 size_t len;
+pid_t childPID = 0;
 
 //flushin all around
 void flush(){
@@ -57,11 +58,29 @@ int getInput(char* string){
   return 1;
 }
 //parse the input we got seperating by spaces
-void inputParser(char* input, char** parsedArguments){
-  int i;
-  for (i = 0; i < len +1; i++) {
-    parsedArguments[i] = strsep(&input, " ");
-  }
+char ** inputParser(char* input){
+     //set buffer to the size of the parsedArguemnts array
+     int bufSize = 512;
+     char *arg;
+     char **argsArray = malloc(bufSize * sizeof(char*));
+     int position = 0;
+     
+
+     arg = strtok(input, " ");
+
+     while (arg != NULL)
+     {
+
+          argsArray[position] = arg;
+          position++;
+          //reset token
+          arg = strtok(NULL, " ");
+     }
+     //set end of array to null to prevent seg faults later
+
+     argsArray[position] = NULL;
+     
+     return argsArray;
 }
 // got the generic checkign code from 
 //https://stackoverflow.com/questions/26683162/execute-background-process-and-check-status-from-parent
@@ -126,10 +145,11 @@ int ArgCount(char **parsedArguments){
 }
 
 //child forking from lectures and using execvp
-int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t numberOfArgs, struct sigaction *sa)
+int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *numberOfArgs, struct sigaction *sa)
 {
   //forking from lecture
   pid_t pid = fork();
+
   int ampersandBool = ampersandCheck(parsedArguments, numberOfArgs);
 
   //sigstp pathways
@@ -149,7 +169,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t
   if (ampersandBool == 0 && pid == 0)
   {
     sa->sa_handler = &FG_handler;
-    redirChecker(parsedArguments, numberOfArgs, pid);
+    redirChecker(parsedArguments, *numberOfArgs, pid);
   }
   else if (ampersandBool == 1 && pid == 0)
   {
@@ -158,7 +178,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t
     //set input and output to null unless specified by the redir checker
     dup2(null, STDIN_FILENO);
     dup2(null, STDOUT_FILENO);
-    redirChecker(parsedArguments, numberOfArgs, pid);
+    redirChecker(parsedArguments, *numberOfArgs, pid);
   }
   flush();
   //checking to see if its the parent
@@ -189,7 +209,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, size_t
    return 0;
 }
 //basic splice function, sets the end of the party to null so, we dont run off later on
-void valueShift(char** parsedArguments, size_t numberOfArgs,int index){
+void valueShift(char** parsedArguments, int numberOfArgs,int index){
   
   for (int i = index; i < numberOfArgs ; ++i)
   {
@@ -198,7 +218,7 @@ void valueShift(char** parsedArguments, size_t numberOfArgs,int index){
   parsedArguments[numberOfArgs] = NULL;
 
 }
-int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
+int redirChecker(char** parsedArguments, int numberOfArgs, pid_t pid){
   int redirBool = 1;
 
     if (pid == -1) {
@@ -209,6 +229,7 @@ int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
     //if statement for detecting > and < 
     // if redir bool is not set then execute without using dup2
     else if (pid == 0) {
+
       for (int i = 0; i < numberOfArgs + 1; ++i){
         fflush(0);
         //for each iteration see if the command matches > or <,
@@ -216,6 +237,7 @@ int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
 
         if (strcmp(parsedArguments[i], ">") == 0)
         {
+          //printf("%d\n",numberOfArgs );
           //set the redir bool to let the method know we've redirected 
         
          int fd = open(parsedArguments[i+1], O_CREAT|O_WRONLY);
@@ -250,6 +272,7 @@ int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
          numberOfArgs--;
          //set the redir bool flag
          redirBool = 0;
+
          //set i back to 0 to loop over the freshly moved vars
         i = 0;
         
@@ -260,6 +283,7 @@ int redirChecker(char** parsedArguments, size_t numberOfArgs, pid_t pid){
   //couldnt get it working properly without seperating these two 
   if (redirBool == 0)
   {
+    printf("%s\n", parsedArguments[0]);
    execvp(parsedArguments[0], parsedArguments);
    exit(0);
   }
@@ -276,8 +300,8 @@ return 1;
 }
 
 //function to check the butt of the string for an ampersand
-int ampersandCheck(char **parsedArguments, size_t numberOfArgs){
-  for (int i = numberOfArgs; i < numberOfArgs + 1; ++i)
+int ampersandCheck(char **parsedArguments, int* numberOfArgs){
+  for (int i = *numberOfArgs; i < *numberOfArgs + 1; ++i)
   {
     if (strcmp(parsedArguments[i], "&") == 0)
     {
@@ -292,8 +316,15 @@ int ampersandCheck(char **parsedArguments, size_t numberOfArgs){
 
 void defaultSH(int signo){
   if (signo == SIGINT){
+    //if theres a child process in the foreground when sigint is recieved, spit out its id and
+    //the signal that killed it.
+    if (childPID > 0)
+    {
+      printf("Foreground process: %d terminated due to signal %d\n",childPID, signo );
+      childPID = 0;
+    }
     //ignore sigint for the normal shell and BG processes
-    printf("\n");
+    
     flush();
     return;
   }
@@ -311,10 +342,6 @@ void defaultSH(int signo){
 void FG_handler(int signo)
 {
   //exit if the FG process has its handler set to this one.
-  if (signo == SIGINT){
-    //kill(getpid(), 2);
-    return;
-  }
   if (signo == SIGTSTP)
   {
     return;
@@ -325,11 +352,12 @@ void FG_handler(int signo)
 int main(int argc, char const *argv[]) {
   //char array for input and parsed arguments derived from input
   char inputbuffer[2048];
-  char* parsedArguments[512];
-  pid_t childPID = 0;
+  char **parsedArguments;
+  
   int currentStatus = 0;
-  char * parentpid ;
-  size_t numberOfArgs;
+  char pid[10];
+  char* parentpid = pid;
+  int numberOfArgs = 0;
   
   struct sigaction sa;
   sa.sa_flags = 0;
@@ -353,20 +381,22 @@ int main(int argc, char const *argv[]) {
         continue;
       }
 
-      inputParser(inputbuffer, parsedArguments);
-      numberOfArgs = ArgCount(parsedArguments);
+      parsedArguments = inputParser(inputbuffer);
       //set the end of the args to null to prevent segfaults
-      parsedArguments[numberOfArgs + 1] = NULL;
-
+     
+      numberOfArgs = ArgCount(parsedArguments);
+      
       // a giant if else statement to detect if we're using in house commands before moving on to 
       //creating children
       //loop to check for $$
+
       for (int i = 0; i < numberOfArgs + 1; ++i)
       {
         //got the conversion from https://stackoverflow.com/questions/15262315/how-to-convert-pid-t-to-string
         if (strcmp(parsedArguments[i], "$$") == 0)
         {   
-          char pid[10];
+
+         
           snprintf(pid, 10,"%d",(int)getpid());
           parsedArguments[i] = pid;
           parentpid = pid;
@@ -393,16 +423,18 @@ int main(int argc, char const *argv[]) {
         printf("%d\n", currentStatus );
         flush();
       }
+
       //check for the $$ command
       else if (strcmp(parsedArguments[0], parentpid) == 0)
       {
+    
         printf("%s\n", parentpid );
       }
-      
       else{
+
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
-        if (execArgs(parsedArguments,&currentStatus,&childPID, numberOfArgs, &sa) == 1){
+        if (execArgs(parsedArguments,&currentStatus,&childPID, &numberOfArgs, &sa) == 1){
           currentStatus = 1;
         }
   
