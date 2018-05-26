@@ -27,6 +27,7 @@ int bgCount = 0;
 int crtlZ = -1;
 size_t len;
 pid_t childPID = 0;
+int currentStatus = 0;
 
 //flushin all around
 void flush(){
@@ -86,20 +87,20 @@ char ** inputParser(char* input){
 //https://stackoverflow.com/questions/26683162/execute-background-process-and-check-status-from-parent
 //then just implemented that method into a for loop to check all current bg processes for exits or signals.
 void checkBg() {
-  int currentStatus;
+  int currentStat;
   for(int i = 0; i < bgCount; i++) 
   { 
-    if(waitpid(bgProcesses[i], &currentStatus, WNOHANG) > 0)
+    if(waitpid(bgProcesses[i], &currentStat, WNOHANG) > 0)
     {
       //check if it was signaled to exit
-      if(WIFSIGNALED(currentStatus)) 
+      if(WIFSIGNALED(currentStat)) 
       {
-        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStatus));
+        printf("Child %d exited with status: %d\n", bgProcesses[i], WTERMSIG(currentStat));
       }
       //check if it exited on its own
-      if(WIFEXITED(currentStatus)) 
+      if(WIFEXITED(currentStat)) 
       { 
-        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStatus));
+        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStat));
       }
     }
   }
@@ -206,7 +207,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *n
     } 
      
   }
-   return 0;
+   return 1;
 }
 //basic splice function, sets the end of the party to null so, we dont run off later on
 void valueShift(char** parsedArguments, int numberOfArgs,int index){
@@ -285,11 +286,13 @@ int redirChecker(char** parsedArguments, int numberOfArgs, pid_t pid){
   {
     printf("%s\n", parsedArguments[0]);
    execvp(parsedArguments[0], parsedArguments);
+   currentStatus = 0;
    exit(0);
   }
   if (redirBool == 1)
   {
    execvp(parsedArguments[0], parsedArguments);
+   currentStatus = 0;
    exit(0);
   }
   //exit for the children
@@ -320,7 +323,8 @@ void defaultSH(int signo){
     //the signal that killed it.
     if (childPID > 0)
     {
-      printf("Foreground process: %d terminated due to signal %d\n",childPID, signo );
+      currentStatus = signo;
+      //printf("Foreground process: %d terminated due to signal %d\n",childPID, signo );
       childPID = 0;
     }
     //ignore sigint for the normal shell and BG processes
@@ -354,7 +358,7 @@ int main(int argc, char const *argv[]) {
   char inputbuffer[2048];
   char **parsedArguments;
   
-  int currentStatus = 0;
+
   char pid[10];
   char* parentpid = pid;
   int numberOfArgs = 0;
