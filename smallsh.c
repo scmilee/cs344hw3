@@ -12,7 +12,7 @@ void flush();
 char **inputParser(char* input);
 int changeDirectory(char * path);
 int ArgCount(char **parsedArguments);
-int execArgs(char** parsedArguments, int *currentStatus, pid_t* childPID,int *numberOfArgs, struct sigaction *sa);
+int execArgs(char** parsedArguments, pid_t* childPID,int *numberOfArgs, struct sigaction *sa);
 int redirChecker(char ** parsedArguments, int numberOfArgs, pid_t pid);
 int ampersandCheck(char **parsedArguments, int *numberOfArgs);
 void shiftArgs(char **parsedArguments, int index);
@@ -146,7 +146,7 @@ int ArgCount(char **parsedArguments){
 }
 
 //child forking from lectures and using execvp
-int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *numberOfArgs, struct sigaction *sa)
+int execArgs(char** parsedArguments, pid_t *childPID, int *numberOfArgs, struct sigaction *sa)
 {
   //forking from lecture
   pid_t pid = fork();
@@ -190,10 +190,10 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *n
     {
       *childPID = pid;
 
-      waitpid(pid, currentStatus, 0);
-      if(WIFSIGNALED(*currentStatus)) 
+      waitpid(pid, &currentStatus, 0);
+      if(WIFSIGNALED(currentStatus)) 
       {
-        printf("Foreground Process %d exited from signal:%d\n", pid, WTERMSIG(*currentStatus));
+        printf("Foreground Process %d exited from signal:%d\n", pid, WTERMSIG(currentStatus));
       }
 
     }
@@ -203,7 +203,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *n
       //add bg processes to an array as suggested, to loop over and check.
       bgProcesses[bgCount] = pid;
       bgCount++;
-      waitpid(pid, currentStatus, WNOHANG);
+      waitpid(pid, &currentStatus, WNOHANG);
     } 
      
   }
@@ -351,6 +351,14 @@ void FG_handler(int signo)
     return;
   }
 }
+void killTheYounglings(){
+  //kill all bg processes 
+  for (int i = 0; i < bgCount + 1; ++i)
+  {
+    kill(bgProcesses[i], SIGQUIT);
+  }
+  return;
+}
 
 
 int main(int argc, char const *argv[]) {
@@ -409,7 +417,7 @@ int main(int argc, char const *argv[]) {
       }
       //EXIT catch```````````````````````````````````````````````````````````````
       if (strcmp(parsedArguments[0], "exit") == 0){
-       
+        killTheYounglings();
          exit(0);
        } 
       // CD catch``````````````````````````````````````````````````````
@@ -431,14 +439,13 @@ int main(int argc, char const *argv[]) {
       //check for the $$ command
       else if (strcmp(parsedArguments[0], parentpid) == 0)
       {
-    
         printf("%s\n", parentpid );
       }
       else{
 
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
-        if (execArgs(parsedArguments,&currentStatus,&childPID, &numberOfArgs, &sa) == 1){
+        if (execArgs(parsedArguments,&childPID, &numberOfArgs, &sa) == 1){
           currentStatus = 1;
         }
   
