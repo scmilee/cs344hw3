@@ -287,14 +287,16 @@ int redirChecker(char** parsedArguments, int numberOfArgs, pid_t pid){
   {
     printf("%s\n", parsedArguments[0]);
    execvp(parsedArguments[0], parsedArguments);
-   currentStatus = 0;
-   exit(0);
+   printf("%s: no such file or directory.\n", parsedArguments[0] );
+   flush();
+   exit(1);
   }
   if (redirBool == 1)
   {
    execvp(parsedArguments[0], parsedArguments);
-   currentStatus = 0;
-   exit(0);
+   printf("%s: no such file or directory.\n", parsedArguments[0] );
+   flush();
+   exit(1);
   }
   //exit for the children
   exit(0);
@@ -440,7 +442,7 @@ int main(int argc, char const *argv[]) {
         }
       }// STATUS catch ```````````````````````````````````````````````````
       else if (strcmp(parsedArguments[0], "status") == 0){
-        printf("%d\n", currentStatus );
+        printf("Exit/Signal value of: %d.\n", currentStatus );
         flush();
       }
 
