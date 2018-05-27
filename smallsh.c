@@ -19,6 +19,7 @@ void shiftArgs(char **parsedArguments, int index);
 void checkBg(void);
 void FG_handler(int signo);
 void defaultSH(int signo);
+void killTheYounglings(void);
 
 
 //got tired of passing even more variables to the exec args functions
@@ -169,6 +170,7 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *n
   }
   if (ampersandBool == 0 && pid == 0)
   {
+    //change the handler to the FG handler 
     sa->sa_handler = &FG_handler;
     redirChecker(parsedArguments, *numberOfArgs, pid);
   }
@@ -189,10 +191,13 @@ int execArgs(char** parsedArguments, int *currentStatus, pid_t *childPID, int *n
     if (ampersandBool == 0)
     {
       *childPID = pid;
+      //wait for the child if its not makred as a bg process
 
       waitpid(pid, currentStatus, 0);
+
       if(WIFSIGNALED(*currentStatus)) 
       {
+        *currentStatus = WTERMSIG(*currentStatus);
         printf("Foreground Process %d exited from signal:%d\n", pid, WTERMSIG(*currentStatus));
       }
 
@@ -281,7 +286,7 @@ int redirChecker(char** parsedArguments, int numberOfArgs, pid_t pid){
     
   }
 
-  //couldnt get it working properly without seperating these two 
+  //couldnt get it working properly without seperating these two for some reason??
   if (redirBool == 0)
   {
     printf("%s\n", parsedArguments[0]);
@@ -323,7 +328,7 @@ void defaultSH(int signo){
     //the signal that killed it.
     if (childPID > 0)
     {
-      currentStatus = signo;
+      
       //printf("Foreground process: %d terminated due to signal %d\n",childPID, signo );
       childPID = 0;
     }
@@ -351,6 +356,16 @@ void FG_handler(int signo)
     return;
   }
 }
+void killTheYounglings(){
+  //kill all bg processes 
+  for (int i = 0; i < bgCount + 1; ++i)
+  {
+    kill(bgProcesses[i], SIGQUIT);
+  }
+  //kill the fg child
+  kill(childPID, SIGQUIT);
+  return;
+}
 
 
 int main(int argc, char const *argv[]) {
@@ -368,6 +383,7 @@ int main(int argc, char const *argv[]) {
   //error checking
 
   sa.sa_handler = defaultSH;
+  //handle int and tstp 
   sigaction(SIGINT, &sa, NULL);
   sigaction(SIGTSTP, &sa, NULL);
   
@@ -399,8 +415,7 @@ int main(int argc, char const *argv[]) {
         //got the conversion from https://stackoverflow.com/questions/15262315/how-to-convert-pid-t-to-string
         if (strcmp(parsedArguments[i], "$$") == 0)
         {   
-
-         
+         //replace $$ with the actual process id in the argument array
           snprintf(pid, 10,"%d",(int)getpid());
           parsedArguments[i] = pid;
           parentpid = pid;
@@ -409,7 +424,7 @@ int main(int argc, char const *argv[]) {
       }
       //EXIT catch```````````````````````````````````````````````````````````````
       if (strcmp(parsedArguments[0], "exit") == 0){
-       
+        killTheYounglings();
          exit(0);
        } 
       // CD catch``````````````````````````````````````````````````````
