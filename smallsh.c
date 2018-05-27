@@ -366,7 +366,7 @@ void killTheYounglings(){
   //kill all bg processes 
   for (int i = 0; i < bgCount + 1; ++i)
   {
-    kill(bgProcesses[i], SIGQUIT);
+    kill(bgProcesses[i], SIGTERM);
   }
   return;
 }
@@ -442,6 +442,11 @@ int main(int argc, char const *argv[]) {
         }
       }// STATUS catch ```````````````````````````````````````````````````
       else if (strcmp(parsedArguments[0], "status") == 0){
+       //conversion of the command task error to plain old 1 to match specs
+        if (currentStatus == 256)
+        {
+          currentStatus = 1;
+        }
         printf("Exit/Signal value of: %d.\n", currentStatus );
         flush();
       }
