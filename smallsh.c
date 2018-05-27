@@ -95,12 +95,12 @@ void checkBg() {
       //check if it was signaled to exit
       if(WIFSIGNALED(currentStat)) 
       {
-        printf("Child %d exited with status: %d\n", bgProcesses[i], WTERMSIG(currentStat));
+        printf("\nChild %d exited with status: %d\n", bgProcesses[i], WTERMSIG(currentStat));
       }
       //check if it exited on its own
       if(WIFEXITED(currentStat)) 
       { 
-        printf("Child %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStat));
+        printf("\nChild %d exited with status: %d\n", bgProcesses[i], WEXITSTATUS(currentStat));
       }
     }
   }
@@ -193,13 +193,14 @@ int execArgs(char** parsedArguments, pid_t *childPID, int *numberOfArgs, struct 
       waitpid(pid, &currentStatus, 0);
       if(WIFSIGNALED(currentStatus)) 
       {
-        printf("Foreground Process %d exited from signal:%d\n", pid, WTERMSIG(currentStatus));
+        currentStatus = WTERMSIG(currentStatus);
+        printf("\nForeground Process %d exited from signal:%d\n", pid, WTERMSIG(currentStatus));
       }
 
     }
     else if (ampersandBool == 1)
     {
-      printf("Background process PID is :%d\n", pid );
+      printf("\nBackground process PID is :%d\n", pid );
       //add bg processes to an array as suggested, to loop over and check.
       bgProcesses[bgCount] = pid;
       bgCount++;
@@ -338,6 +339,14 @@ void defaultSH(int signo){
   if (signo == SIGTSTP)
   {
     crtlZ = crtlZ * -1;
+    if (crtlZ == 1)
+    {
+      printf("\nActivating Foreground only mode, & will be ignored.\n");
+    }
+    if (crtlZ == -1)
+    {
+      printf("\nDeactivating Foreground only mode, & will be registered.\n");
+    }
     return;
   }
   return;
@@ -345,7 +354,7 @@ void defaultSH(int signo){
 
 void FG_handler(int signo)
 {
-  //exit if the FG process has its handler set to this one.
+  //ignore tstp if fg process
   if (signo == SIGTSTP)
   {
     return;
@@ -383,6 +392,7 @@ int main(int argc, char const *argv[]) {
   //infinite loop!
   while (1) {
       //signal(SIGINT, SIG_IGN);
+      flush();
       checkBg();
       flush();
       printf(": ");
@@ -407,8 +417,6 @@ int main(int argc, char const *argv[]) {
         //got the conversion from https://stackoverflow.com/questions/15262315/how-to-convert-pid-t-to-string
         if (strcmp(parsedArguments[i], "$$") == 0)
         {   
-
-         
           snprintf(pid, 10,"%d",(int)getpid());
           parsedArguments[i] = pid;
           parentpid = pid;
@@ -440,12 +448,13 @@ int main(int argc, char const *argv[]) {
       else if (strcmp(parsedArguments[0], parentpid) == 0)
       {
         printf("%s\n", parentpid );
+        flush();
       }
       else{
 
         //if there was an issue executing the command. set the status to 1
         //also executes the meat and potatoes of the shell
-        if (execArgs(parsedArguments,&childPID, &numberOfArgs, &sa) == 1){
+        if (execArgs(parsedArguments,&childPID, &numberOfArgs, &sa) == 0){
           currentStatus = 1;
         }
   
