@@ -242,7 +242,7 @@ int redirChecker(char** parsedArguments, int numberOfArgs, pid_t pid){
           //printf("%d\n",numberOfArgs );
           //set the redir bool to let the method know we've redirected 
         
-         int fd = open(parsedArguments[i+1], O_CREAT|O_WRONLY);
+         int fd = open(parsedArguments[i+1], O_CREAT|O_WRONLY,  0666);
          //close off normal stdout
          close(STDOUT_FILENO);
          //redirect stdout into the file name of arg[i+1], since i == >
