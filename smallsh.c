@@ -364,7 +364,8 @@ void FG_handler(int signo)
 }
 void killTheYounglings(){
   //kill all bg processes 
-  for (int i = 0; i < bgCount + 1; ++i)
+  //and set the output to null to prevent any output during exit
+  for (int i = 0; i < bgCount; ++i)
   {
     kill(bgProcesses[i], SIGTERM);
   }
@@ -428,7 +429,7 @@ int main(int argc, char const *argv[]) {
       //EXIT catch```````````````````````````````````````````````````````````````
       if (strcmp(parsedArguments[0], "exit") == 0){
         killTheYounglings();
-         exit(0);
+        exit(0);
        } 
       // CD catch``````````````````````````````````````````````````````
       else if (strcmp(parsedArguments[0], "cd") == 0){
